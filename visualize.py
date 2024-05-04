@@ -18,7 +18,7 @@ def load(path: str, size: int):
 
 
 def get_type(index: Tuple[int, int], size: int):
-    elevs = torch.tensor([0, 0, 0, math.pi / 6, math.pi / 6, math.pi / 6]).cuda()
+    elevs = torch.tensor([math.pi / 6, math.pi / 6, math.pi / 6, 0, 0, 0]).cuda()
     azims = torch.tensor([0, math.pi / 2, math.pi, 0, math.pi / 2, math.pi]).cuda()
 
     index = torch.tensor(index).cuda()
@@ -43,7 +43,7 @@ def main():
     cam, ims = get_type(index=index, size=image_size)
 
     # generate point flow
-    mask = get_epi_attention(cam[0], math.radians(39.6), image_size).compute_attention_mask(cam[1]).reshape(
+    mask = get_epi_attention(cam[1], math.radians(39.6), image_size).compute_attention_mask(cam[0]).reshape(
         image_size * image_size, image_size, image_size
     ).detach().cpu()
 

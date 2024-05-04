@@ -45,7 +45,7 @@ def transform_points_screen(points: torch.Tensor, matrix: torch.Tensor, H: int, 
     points = points @ matrix
     points = points[..., :2] / (points[..., 3:] + 0.0000001)
     y, x = points[..., 0:1], points[..., 1:2]
-    y = (y + 1.0) * H * 0.5
+    y = (-y + 1.0) * H * 0.5
     x = (x + 1.0) * W * 0.5
     points_out = torch.cat([y, x], dim=-1)
     return points_out
@@ -106,7 +106,7 @@ def get_points_flow(pts: torch.Tensor, center: torch.Tensor, imh: int, imw: int)
     points_two = torch.where(left_sane.repeat(1,2) & points_two_zero, left, points_two)
 
     # if source point lies inside target screen (find only one intersection)
-    if (imh >= center[0, 0] >= 0) and (imw >= center[0, 1] >= 0):
+    if (imh >= center[0] >= 0) and (imw >= center[1] >= 0):
         points_one_flow = points_one - center
         points_one_flow_direction = (points_one_flow > 0)
 
@@ -119,8 +119,8 @@ def get_points_flow(pts: torch.Tensor, center: torch.Tensor, imh: int, imw: int)
         # points two is source camera center
         points_two = points_two * 0 + center
     
-    points_one = (points_one - 0.5).reshape(imh, imw, 2).fliplr().reshape(-1, 2).int()
-    points_two = (points_two - 0.5).reshape(imh, imw, 2).fliplr().reshape(-1, 2).int()
+    points_one = (points_one - 0.5).reshape(-1, 2).int()
+    points_two = (points_two - 0.5).reshape(-1, 2).int()
     
     return points_one, points_two
 
@@ -162,7 +162,7 @@ class EpiAttention:
             attn_settings.projmatrix,
             attn_settings.image_height,
             attn_settings.image_width
-        ) # [1, 2]
+        ).squeeze() # [2]
 
         points_one, points_two = get_points_flow(
             pts_screen,

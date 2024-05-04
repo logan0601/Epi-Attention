@@ -9,6 +9,48 @@ from pytorch3d.renderer import NDCMultinomialRaysampler, PerspectiveCameras, ray
 from pytorch3d.utils import cameras_from_opencv_projection
 
 
+def get_opencv_from_blender(matrix_world: Tensor, fov: float, image_size: int):
+    # convert matrix_world to opencv format extrinsics
+    opencv_world_to_cam = matrix_world.float().inverse()
+    opencv_world_to_cam[1, :] *= -1
+    opencv_world_to_cam[2, :] *= -1
+    R, T = opencv_world_to_cam[:3, :3], opencv_world_to_cam[:3, 3]
+    R, T = R.unsqueeze(0), T.unsqueeze(0)
+    
+    # convert fov to opencv format intrinsics
+    focal = 1 / np.tan(fov / 2)
+    intrinsics = np.diag(np.array([focal, focal, 1])).astype(np.float32)
+    opencv_cam_matrix = torch.from_numpy(intrinsics).unsqueeze(0).float()
+    opencv_cam_matrix[:, :2, -1] += torch.tensor([image_size / 2, image_size / 2])
+    opencv_cam_matrix[:, [0,1], [0,1]] *= image_size / 2
+    opencv_cam_matrix = opencv_cam_matrix.to(device=matrix_world.device)
+
+    return R, T, opencv_cam_matrix
+
+
+def get_blender_camera(pos: Tensor):
+    # pos in [B, 3]
+    z = pos / torch.linalg.norm(pos, dim=1, keepdims=True)
+
+    up = torch.tensor([[0, 0, 1]]).to(pos)
+    x = torch.cross(up, z, dim=1)
+    x = x / torch.linalg.norm(x, dim=1, keepdims=True)
+
+    y = torch.cross(z, x, dim=1)
+    y = y / torch.linalg.norm(y, dim=1, keepdims=True)
+
+    cam = torch.zeros((pos.shape[0], 4, 4)).to(pos)
+    cam[:, :3] = torch.stack([x, y, z, pos], dim=2)
+    cam[:, 3, 3] = 1
+    return cam
+
+
+def get_pytorch3d_camera(c: torch.Tensor, fov: float, size: int):
+    R, T, intrinsics = get_opencv_from_blender(c, fov, size)
+    c = cameras_from_opencv_projection(R, T, intrinsics, torch.tensor([size, size]).float().unsqueeze(0))
+    return c
+
+
 def compute_points(src_cam: PerspectiveCameras, tgt_cam: PerspectiveCameras, imh: int, imw: int):
     # generates raybundle using camera intrinsics and extrinsics
     src_ray_bundle = NDCMultinomialRaysampler(
@@ -141,42 +183,6 @@ def compute_epipolar_mask(src_cam: PerspectiveCameras, tgt_cam: PerspectiveCamer
     attention_mask = attention_mask.reshape(imh * imw, imh * imw)
 
     return attention_mask
-
-
-def get_opencv_from_blender(matrix_world: Tensor, fov: float, image_size: int):
-    # convert matrix_world to opencv format extrinsics
-    opencv_world_to_cam = matrix_world.float().inverse()
-    opencv_world_to_cam[1, :] *= -1
-    opencv_world_to_cam[2, :] *= -1
-    R, T = opencv_world_to_cam[:3, :3], opencv_world_to_cam[:3, 3]
-    R, T = R.unsqueeze(0), T.unsqueeze(0)
-    
-    # convert fov to opencv format intrinsics
-    focal = 1 / np.tan(fov / 2)
-    intrinsics = np.diag(np.array([focal, focal, 1])).astype(np.float32)
-    opencv_cam_matrix = torch.from_numpy(intrinsics).unsqueeze(0).float()
-    opencv_cam_matrix[:, :2, -1] += torch.tensor([image_size / 2, image_size / 2])
-    opencv_cam_matrix[:, [0,1], [0,1]] *= image_size / 2
-    opencv_cam_matrix = opencv_cam_matrix.to(device=matrix_world.device)
-
-    return R, T, opencv_cam_matrix
-
-
-def get_blender_camera(pos: Tensor):
-    # pos in [B, 3]
-    z = pos / torch.linalg.norm(pos, dim=1, keepdims=True)
-
-    up = torch.tensor([[0, 0, 1]]).to(pos)
-    x = torch.cross(up, z, dim=1)
-    x = x / torch.linalg.norm(x, dim=1, keepdims=True)
-
-    y = torch.cross(z, x, dim=1)
-    y = y / torch.linalg.norm(y, dim=1, keepdims=True)
-
-    cam = torch.zeros((pos.shape[0], 4, 4)).to(pos)
-    cam[:, :3] = torch.stack([x, y, z, pos], dim=2)
-    cam[:, 3, 3] = 1
-    return cam
 
 
 def get_epipolar_mask(cam_poses: Tensor, fov: float, image_size: int, scale: int):
