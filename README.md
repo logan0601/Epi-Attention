@@ -37,3 +37,7 @@ You can visualize the epipolar line by commands.
 python visualize.py
 ```
 Please check `index` in visualize.py for using different images in assets.
+
+<p align="center">
+  <img src="assets/vis.gif">
+</p>
